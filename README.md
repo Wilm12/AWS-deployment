@@ -33,7 +33,7 @@ It reflects industry best practices by separating **application source code** an
 2. Create Key Pairs  
 3. Create Security Groups  
 4. Launch EC2 Instances with userdata  
-5. Update IP-to-name mapping in Route 53 private zone  
+5. Update IP-to-name mapping in Route 53 private zone. The applications.properties file updated so that  Tomcat instances communicate with backend services using stable DNS names, not fragile IPs.
 6. Build application from source code (Maven WAR)  
 7. Upload artifact to S3 bucket  
 8. Download artifact to Tomcat EC2 instance  
