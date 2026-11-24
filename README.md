@@ -1,123 +1,123 @@
-# AWS Automated Application Deployment and Scaling
+# AWS Automated Application Deployment and Auto Scaling
 
 ## Project Overview
 
-This project demonstrates the deployment of a Java web application on Amazon Web Services (AWS), using a scalable infrastructure architecture built around EC2, S3, an Application Load Balancer and an Auto Scaling Group.
+This project demonstrates the deployment of a multi-tier Java web application on Amazon Web Services (AWS), using cloud infrastructure, deployment automation, load balancing and automatic scaling.
 
-The project uses the VProfile application as its workload and demonstrates how application builds can be separated from deployment by storing versioned build artifacts in Amazon S3 before deploying them to EC2 instances running Apache Tomcat.
+The project uses the VProfile application as its workload. The infrastructure includes EC2 instances for the application and backend services, an Application Load Balancer (ALB), an Auto Scaling Group, Amazon S3 for application artifact storage, and DNS configuration for external access and internal service discovery.
 
-The infrastructure includes dedicated EC2 instances for backend services, private DNS-based service discovery through Route 53, and a load-balanced application tier capable of scaling based on demand.
+Application deployment is automated using Bash scripts, Maven and the AWS CLI. The application is built, uploaded to S3 and subsequently deployed onto EC2 instances running Apache Tomcat.
 
-The deployment was successfully tested. I accessed the application through the Application Load Balancer, logged in and used the application, and verified that the Auto Scaling Group could scale instances up or down.
+The deployment was successfully tested. I accessed the application through the Application Load Balancer, logged in and used the application. I also verified that the Auto Scaling Group could scale instances up and down.
 
 ## Architecture
 
-The deployment uses the following AWS services:
+The infrastructure consists of a load-balanced Tomcat application tier and supporting backend services.
 
-| AWS Service | Responsibility |
+### AWS infrastructure architecture
+
+![AWS Multi-Tier Application Architecture](docs/aws-architecture.png)
+
+### Architecture components
+
+| Component | Responsibility |
 |---|---|
-| Amazon EC2 | Hosts application and backend service instances |
-| Amazon S3 | Stores the compiled Java WAR artifact |
-| Application Load Balancer | Distributes incoming HTTP traffic across application instances |
-| Auto Scaling Group | Automatically adjusts the number of application instances |
-| Route 53 Private Hosted Zone | Provides private DNS names for communication between services |
-| IAM Roles | Provides permissions for AWS resource access |
-| Security Groups | Controls network traffic between infrastructure components |
+| GoDaddy DNS | Public DNS configuration directing users to the load balancer endpoint |
+| Application Load Balancer | Receives incoming application traffic and distributes requests |
+| EC2 Tomcat instances | Host and run the VProfile Java application |
+| Auto Scaling Group | Manages the number of Tomcat instances based on configured scaling conditions |
+| Security Groups | Control network traffic between infrastructure components |
+| Amazon Route 53 Private DNS | Provides internal DNS resolution for backend services |
+| MySQL instances | Provide relational database services |
+| Memcached instances | Provide caching services |
+| RabbitMQ instances | Provide message brokering |
 
-### Architecture flow
+### Application request flow
 
-The application deployment follows this general workflow:
+The main application access path is:
 
-1. The Java application is built using Maven.
-2. The generated WAR artifact is uploaded to an S3 bucket.
-3. EC2 application instances retrieve the WAR file from S3.
-4. The application is deployed to Apache Tomcat.
-5. The Application Load Balancer distributes incoming requests to the application instances.
-6. The Auto Scaling Group manages the number of application instances.
-7. Route 53 private DNS allows application components to communicate using internal DNS names.
+**User → Public DNS (GoDaddy) → Application Load Balancer → Tomcat EC2 instances → VProfile application**
 
-### Architecture diagram
+The Application Load Balancer receives incoming HTTPS traffic and forwards application requests to the Tomcat instances over HTTP on port 8080.
 
-```mermaid
-flowchart TD
-    U[User / Browser] --> ALB[Application Load Balancer]
-    ALB --> EC2A[Tomcat EC2 Instance]
-    ALB --> EC2B[Tomcat EC2 Instance]
+The Tomcat instances are managed by an Auto Scaling Group, allowing the application tier to adjust its capacity according to the configured scaling conditions.
 
-    ASG[Auto Scaling Group] -. Manages capacity .-> EC2A
-    ASG -. Manages capacity .-> EC2B
+### Internal service discovery
 
-    S3[Amazon S3 - WAR Artifact] --> EC2A
-    S3 --> EC2B
+Amazon Route 53 private DNS was configured to allow application components to locate backend services using internal DNS names.
 
-    EC2A --> DNS[Route 53 Private DNS]
-    EC2B --> DNS
-    DNS --> DB[Backend Services]
-```
-
-## Deployment Workflow
-
-### 1. Infrastructure provisioning
-
-The AWS environment was configured with the required infrastructure components:
-
-- EC2 instances for backend services and the application tier.
-- IAM roles for AWS service permissions.
-- Security groups to control network access.
-- A Route 53 private hosted zone for internal service discovery.
-- An Application Load Balancer.
-- An Auto Scaling Group for the application instances.
-
-### 2. Private DNS configuration
-
-Route 53 private DNS was configured to allow application components to communicate using internal DNS names rather than relying directly on changing IP addresses.
-
-The application configuration uses service names such as:
+The private DNS records shown in the architecture include:
 
 - `db01`
 - `mc01`
 - `rmq01`
 
-This provides a more manageable approach to internal service discovery.
+This allows the application environment to use service names rather than depending directly on individual IP addresses.
 
-### 3. Application build and artifact storage
+## Application Build and Deployment Workflow
 
-The application is built using Maven.
+The project separates application building from application deployment.
 
-The `build_and_upload.sh` script automates the build and upload process:
+Amazon S3 acts as the intermediary storage location for the compiled application artifact.
+
+### Deployment workflow
+
+```mermaid
+flowchart TD
+    A[Application Source Code] --> B[Maven Build]
+    B --> C[Generate WAR Artifact]
+    C --> D[Upload WAR to Amazon S3]
+    D --> E[EC2 Tomcat Instance]
+    E --> F[Download WAR from S3]
+    F --> G[Deploy to Tomcat]
+    G --> H[Restart Tomcat]
+    H --> I[Application Available]
+```
+
+### 1. Application build and artifact upload
+
+The `build_and_upload.sh` script automates the application build and upload process.
+
+The script uses Maven to generate the WAR deployment artifact:
 
 ```bash
 mvn clean package -DskipTests
 ```
 
-The generated WAR file is uploaded to Amazon S3 using the AWS CLI.
+After the build completes, the script checks for the generated WAR file and uploads it to the configured Amazon S3 bucket using the AWS CLI.
 
-This separates the application build process from the deployment environment.
+This separates the build process from the EC2 deployment environment.
 
-### 4. Application deployment
+**Note:** Automated Maven tests are skipped in this build configuration.
 
-The `deploy_on_ec2.sh` script automates application deployment on the EC2 Tomcat instance.
+### 2. Application deployment on EC2
 
-The script:
+The `deploy_on_ec2.sh` script automates the deployment process on the EC2 application instances.
 
-1. Retrieves the WAR artifact from S3.
-2. Copies it into Tomcat's web applications directory.
+The script performs the following operations:
+
+1. Retrieves the application WAR file from Amazon S3.
+2. Copies the artifact into the Tomcat web applications directory.
 3. Restarts the Tomcat service.
 4. Makes the deployed application available through the application server.
 
 The application is deployed as the Tomcat ROOT application.
 
-### 5. Load balancing
+### 3. Load balancing
 
-An Application Load Balancer was configured to distribute incoming HTTP traffic across the application instances.
+An Application Load Balancer was configured to distribute incoming application traffic across the Tomcat instances.
 
-The application was successfully accessed through the load balancer's DNS endpoint.
+Public DNS was configured to direct users to the load balancer endpoint.
 
-### 6. Auto Scaling
+The application was successfully accessed through the load balancer rather than by connecting directly to an individual EC2 instance.
 
-An Auto Scaling Group was configured to manage the application tier's EC2 capacity.
+### 4. Auto Scaling
 
-Scaling behaviour was tested, and instances were successfully added or removed in response to the configured scaling conditions.
+An Auto Scaling Group was configured to manage the capacity of the Tomcat application tier.
+
+Scaling behaviour was tested, and EC2 instances were successfully added and removed according to the configured scaling conditions.
+
+This demonstrated how the application infrastructure could adjust its capacity rather than relying on a fixed number of application instances.
 
 ## Repository Structure
 
@@ -126,98 +126,101 @@ AWS-deployment/
 ├── README.md
 ├── build_and_upload.sh
 ├── deploy_on_ec2.sh
-└── userdata/
+├── userdata/
+└── docs/
+    └── aws-architecture.png
 ```
-
-The application source code is maintained separately from the infrastructure and deployment repository.
 
 ## Automation Scripts
 
-### build_and_upload.sh
+### `build_and_upload.sh`
 
 Responsible for:
 
 - Building the Java application using Maven.
 - Generating the WAR deployment artifact.
-- Checking that the expected WAR file exists.
+- Checking for the expected build output.
 - Uploading the artifact to Amazon S3.
 
-### deploy_on_ec2.sh
+### `deploy_on_ec2.sh`
 
 Responsible for:
 
-- Retrieving the WAR artifact from S3.
-- Copying it into the Tomcat web applications directory.
+- Downloading the WAR artifact from Amazon S3.
+- Copying the artifact into the Tomcat web applications directory.
 - Restarting the Tomcat service.
 
-Both scripts use Bash error handling to stop execution when commands fail.
+These scripts demonstrate the use of Bash and the AWS CLI to automate application build and deployment operations.
 
-## Technologies Used
+## AWS Services and Technologies
 
 | Technology | Purpose |
 |---|---|
-| Amazon Web Services | Cloud infrastructure |
-| Amazon EC2 | Compute |
-| Amazon S3 | Artifact storage |
-| Application Load Balancer | Traffic distribution |
-| Auto Scaling Groups | Application capacity management |
-| Route 53 | Private DNS and service discovery |
-| IAM | Access management |
-| Security Groups | Network access control |
+| Amazon EC2 | Hosts application and backend service instances |
+| Amazon S3 | Stores application deployment artifacts |
+| Application Load Balancer | Distributes incoming application traffic |
+| Auto Scaling Groups | Manages application instance capacity |
+| Amazon Route 53 | Private DNS and internal service discovery |
+| IAM | Identity and access management |
+| Security Groups | Network traffic control |
 | Apache Tomcat | Java application server |
 | Maven | Application build automation |
-| Bash | Deployment automation |
-| AWS CLI | Interaction with AWS services |
+| Bash | Build and deployment scripting |
+| AWS CLI | AWS service interaction |
+| GoDaddy DNS | Public DNS configuration |
 | Git | Source code management |
 
 ## Deployment Verification
 
 The project was tested through the following activities:
 
-- Successfully provisioned EC2 instances for backend services and the application tier.
-- Configured private DNS resolution through Route 53.
-- Built the Java application and uploaded the WAR artifact to S3.
-- Successfully deployed the application from S3 to EC2/Tomcat.
+- Created EC2 instances for the backend services and Tomcat application tier.
+- Configured Route 53 private DNS for communication between backend services.
+- Built the application using Maven.
+- Uploaded the generated WAR artifact to Amazon S3.
+- Successfully deployed the application from S3 onto EC2/Tomcat.
 - Configured an Application Load Balancer and accessed the application through its endpoint.
-- Configured an Auto Scaling Group and verified scale-out and scale-in behaviour.
+- Configured an Auto Scaling Group and verified that instances scaled up and down.
 - Successfully logged into and used the deployed VProfile application.
 
-These tests verified the application deployment workflow and the operation of the load-balanced, scalable application environment.
+These tests verified the application build and deployment workflow, load-balanced access and the scaling behaviour of the application infrastructure.
 
 ## Skills Demonstrated
 
-This project provided practical experience with:
+Through this project, I gained practical experience with:
 
-- AWS cloud infrastructure provisioning.
-- EC2 instance management.
+- AWS cloud infrastructure.
+- EC2 instance provisioning and management.
 - IAM roles and permissions.
 - Security group configuration.
-- Private DNS and service discovery.
-- S3 artifact storage.
+- Public and private DNS configuration.
+- Route 53 private service discovery.
+- Amazon S3 artifact storage.
 - Maven application builds.
-- Bash deployment automation.
+- Bash scripting and deployment automation.
 - AWS CLI.
-- Apache Tomcat deployment.
+- Apache Tomcat administration.
 - Application Load Balancing.
 - Auto Scaling Groups.
-- Cloud application troubleshooting.
+- Multi-tier application architecture.
+- Cloud infrastructure troubleshooting.
 - Separation of application build and deployment processes.
 
 ## Future Improvements
 
 Potential improvements to the project include:
 
-- Introducing Infrastructure as Code using Terraform.
-- Implementing a CI/CD pipeline for automated builds and deployments.
-- Introducing HTTPS using AWS Certificate Manager.
-- Replacing hardcoded configuration values with environment variables or managed configuration.
-- Improving IAM policies using least-privilege permissions.
-- Introducing automated health checks and deployment validation.
-- Implementing more comprehensive monitoring and logging.
-- Introducing deployment strategies such as rolling deployments or blue-green deployments.
+- Introducing Terraform for Infrastructure as Code.
+- Implementing a CI/CD pipeline for automated application builds and deployments.
+- Introducing HTTPS termination and certificate management using AWS Certificate Manager.
+- Improving secrets management using AWS Systems Manager Parameter Store or AWS Secrets Manager.
+- Applying least-privilege IAM policies.
+- Adding automated deployment validation and health checks.
+- Improving infrastructure monitoring and centralised logging.
+- Exploring rolling and blue-green deployment strategies.
 
 ## Author
 
 **GitHub:** [Wilm12](https://github.com/Wilm12)
 
-**Repository:** [AWS Automated Deployment](https://github.com/Wilm12/AWS-deployment)
+**Repository:** [AWS Automated Application Deployment](https://github.com/Wilm12/AWS-deployment)
