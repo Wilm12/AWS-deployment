@@ -23,7 +23,7 @@ The infrastructure consists of a load-balanced Tomcat application tier and suppo
 | Component | Responsibility |
 |---|---|
 | GoDaddy DNS | Public DNS configuration directing users to the load balancer endpoint |
-| Application Load Balancer | Receives incoming application traffic and distributes requests |
+| Application Load Balancer | Receives incoming HTTP application traffic and distributes requests |
 | EC2 Tomcat instances | Host and run the VProfile Java application |
 | Auto Scaling Group | Manages the number of Tomcat instances based on configured scaling conditions |
 | Security Groups | Control network traffic between infrastructure components |
@@ -38,7 +38,9 @@ The main application access path is:
 
 **User → Public DNS (GoDaddy) → Application Load Balancer → Tomcat EC2 instances → VProfile application**
 
-The Application Load Balancer receives incoming HTTPS traffic and forwards application requests to the Tomcat instances over HTTP on port 8080.
+The Application Load Balancer receives incoming HTTP traffic and forwards application requests to the Tomcat instances over HTTP on port 8080.
+
+The application was accessed using HTTP. HTTPS and SSL/TLS termination were not configured as part of this implementation.
 
 The Tomcat instances are managed by an Auto Scaling Group, allowing the application tier to adjust its capacity according to the configured scaling conditions.
 
@@ -105,11 +107,15 @@ The application is deployed as the Tomcat ROOT application.
 
 ### 3. Load balancing
 
-An Application Load Balancer was configured to distribute incoming application traffic across the Tomcat instances.
+An Application Load Balancer was configured to distribute incoming HTTP application traffic across the Tomcat instances.
 
 Public DNS was configured to direct users to the load balancer endpoint.
 
 The application was successfully accessed through the load balancer rather than by connecting directly to an individual EC2 instance.
+
+**Protocol:** HTTP
+
+HTTPS and SSL/TLS certificate termination were not implemented in this project.
 
 ### 4. Auto Scaling
 
@@ -152,6 +158,8 @@ Responsible for:
 
 These scripts demonstrate the use of Bash and the AWS CLI to automate application build and deployment operations.
 
+AWS infrastructure components such as EC2 instances, the Application Load Balancer, Auto Scaling Group and DNS configuration were configured separately from these application deployment scripts.
+
 ## AWS Services and Technologies
 
 | Technology | Purpose |
@@ -179,7 +187,7 @@ The project was tested through the following activities:
 - Built the application using Maven.
 - Uploaded the generated WAR artifact to Amazon S3.
 - Successfully deployed the application from S3 onto EC2/Tomcat.
-- Configured an Application Load Balancer and accessed the application through its endpoint.
+- Configured an Application Load Balancer and accessed the application through its HTTP endpoint.
 - Configured an Auto Scaling Group and verified that instances scaled up and down.
 - Successfully logged into and used the deployed VProfile application.
 
@@ -212,7 +220,7 @@ Potential improvements to the project include:
 
 - Introducing Terraform for Infrastructure as Code.
 - Implementing a CI/CD pipeline for automated application builds and deployments.
-- Introducing HTTPS termination and certificate management using AWS Certificate Manager.
+- **Implementing HTTPS:** Integrating AWS Certificate Manager (ACM) to provision and manage an SSL/TLS certificate, configuring an HTTPS listener on the Application Load Balancer, and optionally redirecting HTTP traffic to HTTPS.
 - Improving secrets management using AWS Systems Manager Parameter Store or AWS Secrets Manager.
 - Applying least-privilege IAM policies.
 - Adding automated deployment validation and health checks.
